@@ -1,0 +1,186 @@
+# scan2ebook 示例配置（以《在祈祷中相遇》为例）。
+# 复制到项目根并改名 book.toml，按你的书修改。
+
+[book]
+pdf = "books/在祈祷中相遇：与上主成为无话不谈的好友.pdf"
+title = "在祈祷中相遇：与上主成为无话不谈的好友"
+subtitle = "Here's My Heart, Here's My Hand — Living Fully in Friendship with God"
+author = "威廉·贝瑞（William A. Barry, S.J.）著"
+translator = "林清华 译"
+lang = "zh-CN"          # EPUB 语言
+convert = "t2s"         # opencc 转换：t2s/t2sp/s2t/tw2sp/""（空=不转）
+ocr_script = "trad"     # OCR 目标字种：trad=繁体原文 / simp=简体
+output = "在祈祷中相遇.md"   # 可选，最终 Markdown 文件名（默认用 title）
+
+[models]
+base_url = "https://llmapi.paratera.com/v1/chat/completions"
+api_key = ""            # 留空则读环境变量 PARATERA_API_KEY 或 DSH 凭据文件
+ocr = "GLM-4V-Flash"
+proofread = "GLM-4.5-Air"
+
+[ocr]
+dpi = 200
+max_tokens = 1024       # GLM-4V-Flash 上限；用别的模型可调大
+trunc_threshold = 995   # 补全接近此值视为可能截断，触发切半兜底
+
+[proofread]
+max_pages = 8           # 每个子块最多页数（大请求易超时，别调太大）
+max_tokens = 16384
+
+# 章节单元表（start/end 为 PDF 页码，1-based；level 1=部标题，2=章标题）
+# 用 scripts/detect.py 探测生成后粘贴到这里，并人工核对起始页。
+[[units]]
+start = 6
+end = 9
+level = 2
+title = "前言"
+
+[[units]]
+start = 10
+end = 10
+level = 1
+title = "第一部 祈祷"
+
+[[units]]
+start = 11
+end = 16
+level = 2
+title = "第一章 你为什么要祈祷？"
+
+[[units]]
+start = 17
+end = 22
+level = 2
+title = "第二章 天主会和我沟通吗？"
+
+[[units]]
+start = 23
+end = 28
+level = 2
+title = "第三章 我怎么知道是天主？"
+
+[[units]]
+start = 29
+end = 29
+level = 1
+title = "第二部 论分辨和做决定"
+
+[[units]]
+start = 30
+end = 45
+level = 2
+title = "第四章 天主的爱不是功利的"
+
+[[units]]
+start = 46
+end = 55
+level = 2
+title = "第五章 天国与分辨"
+
+[[units]]
+start = 56
+end = 67
+level = 2
+title = "第六章 与天主合一或寻天主的旨意"
+
+[[units]]
+start = 68
+end = 78
+level = 2
+title = "第七章 依纳爵灵修中做决定的过程"
+
+[[units]]
+start = 79
+end = 79
+level = 1
+title = "第三部 当前的困境"
+
+[[units]]
+start = 80
+end = 91
+level = 2
+title = "第八章 什么才是真实的世界？"
+
+[[units]]
+start = 92
+end = 100
+level = 2
+title = "第九章 剧变时代的忠告"
+
+[[units]]
+start = 101
+end = 106
+level = 2
+title = "第十章 我们曾经希望：危机中的默想"
+
+[[units]]
+start = 107
+end = 107
+level = 1
+title = "第四部 天主的渴望"
+
+[[units]]
+start = 108
+end = 113
+level = 2
+title = "第十一章 天主如舞蹈"
+
+[[units]]
+start = 114
+end = 126
+level = 2
+title = "第十二章 天主是谁以及天主要我们如何发展"
+
+[[units]]
+start = 127
+end = 131
+level = 2
+title = "第十三章 天主如何回应我们"
+
+[[units]]
+start = 132
+end = 132
+level = 1
+title = "第五部 与天主为友对我们的影响"
+
+[[units]]
+start = 133
+end = 142
+level = 2
+title = "第十四章 改变我们的天主形象"
+
+[[units]]
+start = 143
+end = 154
+level = 2
+title = "第十五章 有天主就够了吗"
+
+[[units]]
+start = 155
+end = 161
+level = 2
+title = "第十六章 默想生与死"
+
+[[units]]
+start = 162
+end = 166
+level = 2
+title = "第十七章 如同耶稣一般地宽恕"
+
+[[units]]
+start = 167
+end = 169
+level = 2
+title = "第十八章 受辱"
+
+[[units]]
+start = 170
+end = 171
+level = 2
+title = "推荐书目"
+
+[[units]]
+start = 172
+end = 175
+level = 2
+title = "依纳爵灵修相关机构"
