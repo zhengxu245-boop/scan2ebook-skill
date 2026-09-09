@@ -1,6 +1,6 @@
 ---
 name: scan2ebook
-description: "把扫描版/图片版中文书籍 PDF（无文字层）端到端转成结构化简体 Markdown 与 EPUB：视觉大模型 OCR → opencc 繁转简 → LLM 校对分章 → pandoc 出电子书，含断点续跑与模型选型踩坑清单。"
+description: "把扫描版/图片版中文书籍 PDF（无文字层）端到端转成结构化简体 Markdown 与 EPUB：视觉大模型 OCR → opencc 繁转简 → LLM 校对分章 → pandoc 出书。当用户要 OCR 一本书、繁体转简体、把旧扫描书整理成电子书时使用，含断点续跑与模型选型踩坑清单。"
 whenToUse: "当用户要把扫描版中文书籍 PDF 转成可检索的简体电子书（Markdown/EPUB/DOCX），或要求 OCR 一本书、繁体转简体、把旧书整理成结构化电子书时使用。"
 metadata:
   pipeline: [ocr, simplify, detect, proofread, deliver]
