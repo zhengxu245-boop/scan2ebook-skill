@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 运行产物（每个项目自己生成，不入库）
+output/
+books/
+book.toml
+toc.txt
+
+# 系统文件
+.DS_Store

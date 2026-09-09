@@ -1,0 +1,4 @@
+# Python 依赖（建议装进项目 .venv）
+opencc-python-reimplemented>=1.0.4
+# 可选：OCR 输出接近上限时的切半兜底需要 Pillow；不装则跳过兜底
+Pillow>=9.0.0
