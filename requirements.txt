@@ -2,3 +2,7 @@
 opencc-python-reimplemented>=1.0.4
 # 可选：OCR 输出接近上限时的切半兜底需要 Pillow；不装则跳过兜底
 Pillow>=9.0.0
+# PDF 交付（步骤 7：scripts/pdf.py）——纯 Python 出 PDF，含目录页码与「部/章」书签
+# 注意：不要走 HTML→Chrome headless 打印路线（本机实测挂起，见 SKILL.md 坑 #7）
+reportlab>=4.0.0
+pypdf>=4.0.0
