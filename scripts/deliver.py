@@ -26,6 +26,17 @@ def main():
     if not os.path.exists(md):
         raise SystemExit(f"未找到 {md}，请先跑 scripts/proofread.py")
 
+    # 出口闸：交付前成品必须无流水线杂质（[第N页] 占位、OCR 客服废话、页眉/标题残体）
+    with open(md, encoding="utf-8") as f:
+        gate, r1 = common.strip_artifacts(f.read())
+    gate, r2 = common.strip_md_residues(gate)
+    removed = r1 + r2
+    if removed:
+        raise SystemExit(
+            f"成品 {md} 含 {len(removed)} 行流水线杂质，禁止交付。\n"
+            + "\n".join(f"  - {r[:70]}" for r in removed)
+            + "\n请先运行：python scripts/clean.py --fix " + md)
+
     out_dir = common.resolve(root, "output")
     base = os.path.join(out_dir, b["title"])
 
@@ -34,6 +45,12 @@ def main():
            "--metadata", f"title={b['title']}",
            "--metadata", f"lang={b.get('lang', 'zh-CN')}",
            "--toc", "--toc-depth=2"]
+    if b.get("author"):
+        cmd += ["--metadata", f"author={b['author']}"]
+    if b.get("translator"):
+        cmd += ["--metadata", f"translator={b['translator']}"]
+    if b.get("subtitle"):
+        cmd += ["--metadata", f"subtitle={b['subtitle']}"]
     subprocess.run(cmd, check=True)
     print(f"EPUB -> {epub}")
 

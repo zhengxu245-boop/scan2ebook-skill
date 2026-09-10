@@ -43,7 +43,9 @@ def system_prompt(cfg):
         "1. 把断行合并成自然段落；但祈祷文、圣经引文、诗歌的分行要保留换行；\n"
         "2. 修正明显的 OCR 错字，保持原意，不增删内容、不润色、不改写；被误识为「·」的标点按语境还原为「，」「。」「；」等（人名间隔号保留）；\n"
         "3. 删除页眉、页脚、页码等噪声（如每页顶部重复的书名、底部的数字页码）；\n"
-        "4. 不要输出任何标题（章节标题我会自己加）；若开头就是「第X章/第X部」之类的标题行，请忽略它，只输出正文段落。\n\n"
+        "4. 不要输出任何标题（章节标题我会自己加）；若开头就是「第X章/第X部」之类的标题行，请忽略它，只输出正文段落。\n"
+        "5. 删除输入里 `[第N页]` 之类的占位标记，以及任何与书无关的机器说明/对话残句"
+        "（例如「我猜您想让我识别图中正文…」「请您重新上传图片…」这种客服口吻的整句）。\n\n"
         "只输出干净的正文，不要任何解释或标题。"
     )
 
@@ -76,19 +78,28 @@ def main():
     for idx, u in enumerate(units, 1):
         s, e, level, heading = u["start"], u["end"], u.get("level", 2), u["title"]
         sub_ranges = [(a, min(a + max_pages - 1, e)) for a in range(s, e + 1, max_pages)]
-        for si, (a, b) in enumerate(sub_ranges):
+        for si, (a, z) in enumerate(sub_ranges):  # 注意：不能用 b，会遮蔽外层 b = cfg["book"]
             pfile = os.path.join(unit_dir, f"{idx:02d}.{si:02d}.md")
             if os.path.exists(pfile) and os.path.getsize(pfile) >= 10:
                 continue
-            body = "\n\n".join(f"[第{p}页]\n{pages[p]}" for p in range(a, b + 1) if p in pages)
-            print(f"=== [{idx}/{len(units)}] {heading} 页 {a}-{b}（子块 {si+1}/{len(sub_ranges)}，输入 {len(body)} 字）===", flush=True)
+            body = "\n\n".join(f"[第{p}页]\n{pages[p]}" for p in range(a, z + 1) if p in pages)
+            print(f"=== [{idx}/{len(units)}] {heading} 页 {a}-{z}（子块 {si+1}/{len(sub_ranges)}，输入 {len(body)} 字）===", flush=True)
             ok = False
             for attempt in range(4):
                 try:
                     md, usage = common.chat(cfg, [{"role": "system", "content": sys_prompt},
                                                   {"role": "user", "content": body}], max_tokens)
+                    # 确定性兜底：清掉占位符复读/客服废话，不依赖 LLM 自觉
+                    md, removed = common.strip_artifacts(md)
+                    if removed:
+                        print(f"  [clean] 删除杂质 {len(removed)} 行: "
+                              + "; ".join(r[:20] for r in removed), file=sys.stderr)
+                    md = md.strip()
+                    # 缓存文件必须 >=10 字节，否则下次重跑会被当作缺失而重新调 LLM
+                    if len(md.encode("utf-8")) < 10:
+                        md = "<!-- （无正文） -->"
                     with open(pfile, "w", encoding="utf-8") as f:
-                        f.write(md)
+                        f.write(md + "\n")
                     print(f"  -> 输出 {len(md)} 字, usage={usage.get('total_tokens')}", flush=True)
                     ok = True
                     break
@@ -114,17 +125,29 @@ def main():
     for idx, u in enumerate(units, 1):
         s, e, level, heading = u["start"], u["end"], u.get("level", 2), u["title"]
         sub_ranges = [(a, min(a + max_pages - 1, e)) for a in range(s, e + 1, max_pages)]
-        chunks = []
+        chunks, cached = [], False
         for si in range(len(sub_ranges)):
             pfile = os.path.join(unit_dir, f"{idx:02d}.{si:02d}.md")
-            if os.path.exists(pfile):
-                chunks.append(open(pfile, encoding="utf-8").read().strip())
-        if not chunks:
+            if not os.path.exists(pfile):
+                continue
+            cached = True
+            raw = open(pfile, encoding="utf-8").read()
+            body, _ = common.strip_artifacts(raw)
+            body = body.strip()
+            # 空 / 只剩注释的块（如已清空的部扉页单元）不产生任何输出，但标题仍由代码输出
+            if body and not common.is_comment_only(body):
+                chunks.append(body)
+        if not cached:
             parts.append(f"<!-- 缺 {heading} -->\n")
             continue
         h = "#" * max(1, min(6, level))
         parts.append(f"{h} {heading}\n\n" + "\n\n".join(chunks) + "\n")
     final = "\n\n".join(parts).strip() + "\n"
+    # 成品级兜底：删页眉/标题残体与紧跟标题的重复行（不依赖 LLM 自觉）
+    final, removed_res = common.strip_md_residues(final)
+    if removed_res:
+        print(f"[clean] 合并后删除标题残体/重复行 {len(removed_res)} 行: "
+              + "; ".join(r.strip()[:24] for r in removed_res), file=sys.stderr)
     with open(out_md, "w", encoding="utf-8") as f:
         f.write(final)
     print(f"\n完成 -> {out_md}（{len(final)} 字）")

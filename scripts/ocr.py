@@ -33,13 +33,15 @@ def render_page(pdf, work_dir, page, dpi):
 def ocr_prompt(cfg):
     """按 ocr_script 决定目标字种。"""
     script = cfg.get("book", {}).get("ocr_script", "trad")
+    blank_rule = ("若页面为空白、无文字或只有插图而无法转录，请直接输出空字符串，"
+                  "不要输出任何猜测、说明或对话。")
     if script == "simp":
         return ("请忠实逐字识别这张书页图片中的全部文字，按原文从上到下的顺序转录，"
                 "并转为简体中文输出。不要翻译、不要总结、不要添加任何说明。"
-                "页面上的页眉、页脚和页码也一并转录。")
+                "页面上的页眉、页脚和页码也一并转录。" + blank_rule)
     return ("请忠实逐字识别这张书页图片中的全部文字，按原文从上到下的顺序转录。"
             "保持繁体字原样（不要转成简体），不要翻译、不要总结、不要添加任何说明。"
-            "页面上的页眉、页脚和页码也一并转录。")
+            "页面上的页眉、页脚和页码也一并转录。" + blank_rule)
 
 
 def ocr_page(cfg, jpg, max_tokens, trunc_threshold):
@@ -113,6 +115,11 @@ def main():
                 if model:
                     cfg.setdefault("models", {})["ocr"] = model
                 text, usage = ocr_page(cfg, jpg, max_tokens, trunc_threshold)
+                # 兜底：模型不守"不要说明"指令、在空白/插图页输出客服废话时清成空
+                text, removed = common.strip_artifacts(text)
+                if removed:
+                    print(f"page {p}: 删除 {len(removed)} 行客服废话，按空白页处理", file=sys.stderr)
+                text = text.strip()
                 with open(out, "w", encoding="utf-8") as f:
                     json.dump({"page": p, "model": model or cfg["models"].get("ocr"),
                                "dpi": dpi, "text": text, "usage": usage},

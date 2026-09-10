@@ -116,3 +116,131 @@ def parse_pages(s, total):
         else:
             out.append(int(part))
     return sorted(set(out))
+
+
+# ---------------------------------------------------------------
+# 确定性杂质清洗（badcase 2026-09-10：workbuddy 入库反馈成品含 OCR 杂质）
+# 只删"整行"可证伪杂质，绝不动正文：
+#   A) `[第N页]` —— proofread 输入的分页占位符被校对 LLM 原样复读（occasionally）
+#   B) OCR 客服废话 —— 视觉模型在空白/纯插图页不守"不要任何说明"指令输出的口水话
+# ---------------------------------------------------------------
+
+_PAGE_MARKER_RE = re.compile(r"^\s*\[第\s*\d+\s*页\]\s*$")
+
+# GLM-4V-Flash 在空白/插图页上的实测变体（如 ocr/015,119,141,173,235,267,269,301,321）。
+# 均为机器语境强特征词，正文行不会误中（整行匹配 + 长度上限双保险）。
+_CHATTER_SUBSTRINGS = (
+    "图中正文",                    # 我猜您想让我识别图中正文…（空白/只有插图）
+    "识别图片中的文字",             # …我可以帮助您识别图片中的文字…
+    "图中已有的文字内容",           # …帮助您识别图中已有的文字内容。
+    "上传完整的图片",               # 请您重新上传完整的图片…
+    "上传包含所有内容的完整图片",
+    "为您提取图中所有文本",
+    "我猜您可能没有上传",
+    "如果您有其他要求，我将为您解答",
+    "如果您需要的话，我可以帮助您识别",
+    "如果您需要提取图中所有文本的话",
+)
+_CHATTER_MAX_LEN = 120  # 客服废话均为单句短行；超过此长度的行不可能是整行废话
+
+
+def strip_artifacts(text):
+    """确定性删除流水线杂质行（[第N页] 占位符、OCR 客服废话）。
+
+    返回 (清洗后文本, 被删行列表)；仅删整行、只删可证伪杂质，
+    多余空行折叠为最多一个空行（不影响诗歌/祈祷文结构）。
+    """
+    if not text:
+        return text, []
+    removed, kept = [], []
+    for ln in text.split("\n"):
+        s = ln.strip()
+        if _PAGE_MARKER_RE.match(ln):
+            removed.append(ln)
+            continue
+        if s and len(s) <= _CHATTER_MAX_LEN and any(k in s for k in _CHATTER_SUBSTRINGS):
+            removed.append(ln)
+            continue
+        kept.append(ln)
+    cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(kept))
+    return cleaned, removed
+
+
+_COMMENT_RE = re.compile(r"^\s*<!--.*-->\s*$", re.S)
+
+
+def is_comment_only(text):
+    """整段只剩（单个）HTML 注释：用于合并时跳过"已清空"的单元块。"""
+    s = text.strip()
+    return bool(s) and bool(_COMMENT_RE.match(s))
+
+
+# ---------------------------------------------------------------
+# 成品级残体清洗（badcase 家族 #2：2026-09-10 复检《在祈祷中相遇》发现）
+#   A) 页眉/标题残体：正文里独立成行的「第X章 某某」——本流水线标题恒由代码插入，
+#      正文出现同形短行 = 印刷页眉被 OCR 读出、校对未删（实测 ocr/033.json 页尾
+#      「第百章 天主的爱永不止息 033」）。
+#   B) 标题重复：紧跟代码标题之后又重复同一标题的行（印刷章名行被当正文保留）。
+# 仅用于"成品/缓存"层；OCR 与校对阶段尚无标题，那边用 strip_artifacts。
+# ---------------------------------------------------------------
+
+_MD_HEAD_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+_CHAPTER_PREFIX_RE = re.compile(r"^第\s*[一二三四五六七八九十百零〇\d]{1,4}\s*[章部节篇]\s*")
+_TITLE_RESIDUE_RE = re.compile(r"^第\s*[一二三四五六七八九十百零〇\d]{1,4}\s*[章部节篇]\s+\S.{0,28}$")
+_SENT_END_RE = re.compile(r"[。，；：！？、）)\]\"”』」…]\s*$")
+
+
+def strip_md_residues(text, window=6):
+    """成品级清洗：删标题残体（A）与紧跟标题的重复行（B）。返回 (cleaned, removed)。
+
+    只作用于正文行，绝不碰 markdown 标题本身；行尾带句末标点的引用句（如
+    「详见第五章 某某。」）不会被误删。
+
+    B 的窗口按标题长度自适应：标题 ≥4 字时允许出现在其后 6 个非空行内
+    （印刷章名行有时隔一行）；短标题（如「感谢」「前言」「受辱」）只认紧邻的第一个
+    非空行——那是印刷章名页的强签名，避免误删正文里的同名小节标题。
+    """
+    if not text:
+        return text, []
+    removed, kept = [], []
+    head_text, head_core, remaining = None, None, 0
+    for ln in text.split("\n"):
+        s = ln.strip()
+        m = _MD_HEAD_RE.match(ln)
+        if m:
+            head_text = m.group(2).strip()
+            head_core = _CHAPTER_PREFIX_RE.sub("", head_text).strip()
+            long_enough = max(len(head_text), len(head_core or "")) >= 4
+            remaining = window if long_enough else 1
+            kept.append(ln)
+            continue
+        if not s:
+            kept.append(ln)
+            continue
+        if remaining > 0:
+            remaining -= 1
+            if s == head_text or (head_core and s == head_core):
+                removed.append(ln)
+                continue
+        if _TITLE_RESIDUE_RE.match(s) and not _SENT_END_RE.search(s):
+            removed.append(ln)
+            continue
+        kept.append(ln)
+    cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(kept))
+    return cleaned, removed
+
+
+def suspect_lines(text):
+    """只报告不修改：疑似页眉/标题式独立短行（供人工复核，如 clean.py --suspect）。"""
+    out = []
+    for i, ln in enumerate(text.split("\n"), 1):
+        s = ln.strip()
+        if not s or _MD_HEAD_RE.match(ln) or s.startswith(">"):
+            continue
+        if not (5 <= len(s) <= 34):
+            continue
+        if _SENT_END_RE.search(s):
+            continue
+        if _TITLE_RESIDUE_RE.match(s) or re.match(r"^[\u4e00-\u9fff][^。！？]{4,33}$", s):
+            out.append((i, s))
+    return out
