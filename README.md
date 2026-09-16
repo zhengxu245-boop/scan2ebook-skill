@@ -16,6 +16,10 @@
 示例：
 
 ```bash
+# GitHub（海外 / 有代理）
+git clone https://github.com/zhengxu245-boop/scan2ebook-skill.git ~/.agents/skills/scan2ebook
+
+# Gitee（国内直连，内容同步）
 git clone https://gitee.com/foround/scan2ebook-skill.git ~/.agents/skills/scan2ebook
 ```
 
